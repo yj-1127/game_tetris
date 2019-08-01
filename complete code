@@ -1,0 +1,447 @@
+import random, time, pygame, sys
+from pygame.locals import *
+
+fps = 25
+windowwidth = 640
+windowheight = 480
+boxsize = 20
+boardwidth = 10
+boardheight = 20
+blank = '.'
+
+movesidewaysfreq = 0.15
+movedownfreq = 0.1
+
+xmargin = int((windowwidth - boardwidth * boxsize) / 2)
+topmargin = windowheight - (boardheight * boxsize) - 5
+
+
+white       = (255, 255, 255)
+gray        = (185, 185, 185)
+black       = (  0,   0,   0)
+red         = (155,   0,   0)
+lightred    = (175,  20,  20)
+green       = (  0, 155,   0)
+lightgreen  = ( 20, 175,  20)
+blue        = (  0,   0, 155)
+lightblue   = ( 20,  20, 175)
+yellow      = (155, 155,   0)
+lightyellow = (175, 175,  20)
+
+bordercolor = blue
+bgcolor = black
+textcolor = white
+textshadowcolor = gray
+colors      = (     blue,      green,      red,      yellow)
+lightcolors = (lightblue, lightgreen, lightred, lightyellow)
+assert len(colors) == len(lightcolors) 
+
+templatewidth = 5
+templateheight = 5
+
+s_shape_template = [['.....',
+                     '.....',
+                     '..oo.',
+                     '.oo..',
+                     '.....'],
+                    ['.....',
+                     '..o..',
+                     '..oo.',
+                     '...o.',
+                     '.....']]
+
+z_shape_template = [['.....',
+                     '.....',
+                     '.oo..',
+                     '..oo.',
+                     '.....'],
+                    ['.....',
+                     '..o..',
+                     '.oo..',
+                     '.o...',
+                     '.....']]
+
+i_shape_template = [['..o..',
+                     '..o..',
+                     '..o..',
+                     '..o..',
+                     '.....'],
+                    ['.....',
+                     '.....',
+                     'oooo.',
+                     '.....',
+                     '.....']]
+
+o_shape_template = [['.....',
+                     '.....',
+                     '.oo..',
+                     '.oo..',
+                     '.....']]
+
+j_shape_template = [['.....',
+                     '.o...',
+                     '.ooo.',
+                     '.....',
+                     '.....'],
+                    ['.....',
+                     '..oo.',
+                     '..o..',
+                     '..o..',
+                     '.....'],
+                    ['.....',
+                     '.....',
+                     '.ooo.',
+                     '...o.',
+                    '.....'],
+                   ['.....',
+                    '..o..',
+                    '..o..',
+                    '.oo..',
+                    '.....']]
+
+L_shape_template = [['.....',
+                    '...o.',
+                    '.ooo.',
+                    '.....',
+                    '.....'],
+                   ['.....',
+                    '..o..',
+                    '..o..',
+                    '..oo.',
+                    '.....'],
+                   ['.....',
+                    '.....',
+                    '.ooo.',
+                    '.o...',
+                    '.....'],
+                   ['.....',
+                    '.oo..',
+                    '..o..',
+                    '..o..',
+                    '.....']]
+
+T_shape_template = [['.....',
+                    '..o..',
+                    '.ooo.',
+                    '.....',
+                    '.....'],
+                   ['.....',
+                    '..o..',
+                    '..oo.',
+                    '..o..',
+                    '.....'],
+                   ['.....',
+                    '.....',
+                    '.ooo.',
+                    '..o..',
+                    '.....'],
+                   ['.....',
+                    '..o..',
+                    '.oo..',
+                    '..o..',
+                    '.....']]
+
+shapes = {'s': s_shape_template, 'z': z_shape_template, 'j': j_shape_template, 'l': L_shape_template,
+          'i': i_shape_template, 'o': o_shape_template, 't': T_shape_template}
+
+def main():
+   global fpsclock, displaysurf, basicfont, bigfont
+   pygame.init()
+   fpsclock = pygame.time.Clock()
+   displaysurf = pygame.display.set_mode((windowwidth, windowheight))
+   basicfont = pygame.font.Font('font.ttf', 18)
+   bigfont = pygame.font.Font('font.ttf', 100)
+   pygame.display.set_caption('tetris')
+   showtextscreen('tetris')
+   while True :
+       if random.randint(0, 1) == 0:
+           pygame.mixer.music.load('back1.wav')
+       else:
+           pygame.mixer.music.load('back2.wav')
+       pygame.mixer.music.play(-1, 0.0)
+       rungame()
+       pygame.mixer.music.stop()
+       showtextscreen('game over')
+
+def rungame():
+   board = getblankboard()
+   lastmovedowntime = time.time()
+   lastmovesidewaystime = time.time()
+   lastfalltime = time.time()
+   movingdown = False
+   movingleft = False
+   movingright = False
+   score = 0
+   level, fallfreq = calculatelevelandfallfreq(score)
+
+   fallingpiece = getnewpiece()
+   nextpiece = getnewpiece()
+
+   while True: 
+       if fallingpiece == None:
+           fallingpiece = nextpiece
+           nextpiece = getnewpiece()
+           lastfalltime = time.time() 
+
+           if not isvalidposition(board, fallingpiece):
+               return 
+       
+       checkforquit()
+       for event in pygame.event.get(): 
+           if event.type == KEYUP:
+               if (event.key == K_p):
+                   displaysurf.fill(bgcolor)
+                   pygame.mixer.music.stop()
+                   showtextscreen('paused') 
+                   pygame.mixer.music.play(-1, 0.0)
+                   lastfalltime = time.time()
+                   lastmovedowntime = time.time()
+                   lastmovesidewaystime = time.time()
+               elif (event.key == K_LEFT or event.key == K_a):
+                   movingleft = False
+               elif (event.key == K_RIGHT or event.key == K_d):
+                   movingright = False
+               elif (event.key == K_DOWN or event.key == K_s):
+                   movingdown = False
+
+           elif event.type == KEYDOWN:
+               if (event.key == K_LEFT or event.key == K_a) and isvalidposition(board, fallingpiece, adjx=-1):
+                   fallingpiece['x'] -= 1
+                   movingleft = True
+                   movingright = False
+                   lastmovesidewaystime = time.time()
+
+               elif (event.key == K_RIGHT or event.key == K_d) and isvalidposition(board, fallingpiece, adjx=1):
+                   fallingpiece['x'] += 1
+                   movingright = True
+                   movingleft = False
+                   lastmovesidewaystime = time.time()
+
+               elif (event.key == K_UP or event.key == K_w):
+                   fallingpiece['rotation'] = (fallingpiece['rotation'] + 1) % len(shapes[fallingpiece['shape']])
+                   if not isvalidposition(board, fallingpiece):
+                       fallingpiece['rotation'] = (fallingpiece['rotation'] - 1) % len(shapes[fallingpiece['shape']])
+               elif (event.key == K_q):
+                   fallingpiece['rotation'] = (fallingpiece['rotation'] - 1) % len(shapes[fallingpiece['shape']])
+                   if not isvalidposition(board, fallingpiece):
+                       fallingpiece['rotation'] = (fallingpiece['rotation'] + 1) % len(shapes[fallingpiece['shape']])
+
+               elif (event.key == K_DOWN or event.key == K_s):
+                   movingdown = True
+                   if isvalidposition(board, fallingpiece, adjy=1):
+                       fallingpiece['y'] += 1
+                   lastmovedowntime = time.time()
+
+               elif event.key == K_SPACE:
+                   movingdown = False
+                   movingleft = False
+                   movingright = False
+                   for i in range(1, boardheight):
+                       if not isvalidposition(board, fallingpiece, adjy=i):
+                           break
+                   fallingpiece['y'] += i - 1
+
+       if (movingleft or movingright) and time.time() - lastmovesidewaystime > movesidewaysfreq:
+           if movingleft and isvalidposition(board, fallingpiece, adjx=-1):
+               fallingpiece['x'] -= 1
+           elif movingright and isvalidposition(board, fallingpiece, adjx=1):
+               fallingpiece['x'] += 1
+           lastmovesidewaystime = time.time()
+
+       if movingdown and time.time() - lastmovedowntime > movedownfreq and isvalidposition(board, fallingpiece, adjy=1):
+           fallingpiece['y'] += 1
+           lastmovedowntime = time.time()
+
+
+       if time.time() - lastfalltime > fallfreq:
+           if not isvalidposition(board, fallingpiece, adjy=1):
+               addtoboard(board, fallingpiece)
+               score += removecompletelines(board)
+               level, fallfreq = calculatelevelandfallfreq(score)
+               fallingpiece = None
+           else:
+               fallingpiece['y'] += 1
+               lastfalltime = time.time()
+
+       displaysurf.fill(bgcolor)
+       drawboard(board)
+       drawstatus(score, level)
+       drawnextpiece(nextpiece)
+       if fallingpiece != None:
+           drawpiece(fallingpiece)
+
+       pygame.display.update()
+       fpsclock.tick(fps)
+
+
+def maketextobjs(text, font, color):
+   surf = font.render(text, True, color)
+   return surf, surf.get_rect()
+
+
+def terminate():
+   pygame.quit()
+   sys.exit()
+
+
+def checkforkeypress():
+   checkforquit()
+
+   for event in pygame.event.get([KEYDOWN, KEYUP]):
+       if event.type == KEYDOWN:
+           continue
+       return event.key
+   return None
+
+
+def showtextscreen(text):
+   titlesurf, titlerect = maketextobjs(text, bigfont, textshadowcolor)
+   titlerect.center = (int(windowwidth / 2), int(windowheight / 2))
+   displaysurf.blit(titlesurf, titlerect)
+
+   titlesurf, titlerect = maketextobjs(text, bigfont, textcolor)
+   titlerect.center = (int(windowwidth / 2) - 3, int(windowheight / 2) - 3)
+   displaysurf.blit(titlesurf, titlerect)
+
+   presskeysurf, presskeyrect = maketextobjs('press a key to play.', basicfont, textcolor)
+   presskeyrect.center = (int(windowwidth / 2), int(windowheight / 2) + 100)
+   displaysurf.blit(presskeysurf, presskeyrect)
+
+   while checkforkeypress() == None:
+       pygame.display.update()
+       fpsclock.tick()
+
+
+def checkforquit():
+   for event in pygame.event.get(QUIT): 
+       terminate()  
+   for event in pygame.event.get(KEYUP):  
+       if event.key == K_ESCAPE:
+           terminate()  
+       pygame.event.post(event)  
+
+
+def calculatelevelandfallfreq(score):
+   level = int(score / 10) + 1
+   fallfreq = 0.27 - (level * 0.02)
+   return level, fallfreq
+
+def getnewpiece():
+   shape = random.choice(list(shapes.keys()))
+   newpiece = {'shape': shape,
+               'rotation': random.randint(0, len(shapes[shape]) - 1),
+               'x': int(boardwidth / 2) - int(templatewidth / 2),
+               'y': -2, 
+               'color': random.randint(0, len(colors)-1)}
+   return newpiece
+
+
+def addtoboard(board, piece):
+   for x in range(templatewidth):
+       for y in range(templateheight):
+           if shapes[piece['shape']][piece['rotation']][y][x] != blank:
+               board[x + piece['x']][y + piece['y']] = piece['color']
+
+
+def getblankboard():
+   board = []
+   for i in range(boardwidth):
+       board.append([blank] * boardheight)
+   return board
+
+
+def isonboard(x, y):
+   return x >= 0 and x < boardwidth and y < boardheight
+
+
+def isvalidposition(board, piece, adjx=0, adjy=0):
+   for x in range(templatewidth):
+       for y in range(templateheight):
+           isaboveboard = y + piece['y'] + adjy < 0
+           if isaboveboard or shapes[piece['shape']][piece['rotation']][y][x] == blank:
+               continue
+           if not isonboard(x + piece['x'] + adjx, y + piece['y'] + adjy):
+               return False
+           if board[x + piece['x'] + adjx][y + piece['y'] + adjy] != blank:
+               return False
+   return True
+
+def iscompleteline(board, y):
+   for x in range(boardwidth):
+       if board[x][y] == blank:
+           return False
+   return True
+
+
+def removecompletelines(board):
+   numlinesremoved = 0
+   y = boardheight - 1 
+   while y >= 0:
+       if iscompleteline(board, y):
+           for pulldowny in range(y, 0, -1):
+               for x in range(boardwidth):
+                   board[x][pulldowny] = board[x][pulldowny-1]
+           for x in range(boardwidth):
+               board[x][0] = blank
+           numlinesremoved += 1
+       else:
+           y -= 1 
+   return numlinesremoved
+
+
+def converttopixelcoords(boxx, boxy):
+   return (xmargin + (boxx * boxsize)), (topmargin + (boxy * boxsize))
+
+
+def drawbox(boxx, boxy, color, pixelx = None, pixely = None):
+   if color == blank:
+       return
+   if pixelx == None and pixely == None:
+       pixelx, pixely = converttopixelcoords(boxx, boxy)
+   pygame.draw.rect(displaysurf, colors[color], (pixelx + 1, pixely + 1, boxsize - 1, boxsize - 1))
+   pygame.draw.rect(displaysurf, lightcolors[color], (pixelx + 1, pixely + 1, boxsize - 4, boxsize - 4))
+
+
+def drawboard(board):
+   pygame.draw.rect(displaysurf, bordercolor, (xmargin - 3, topmargin - 7, (boardwidth * boxsize) + 8, (boardheight * boxsize) + 8), 5)
+   pygame.draw.rect(displaysurf, bgcolor, (xmargin, topmargin, boxsize * boardwidth, boxsize * boardheight))
+   for x in range(boardwidth):
+       for y in range(boardheight):
+           drawbox(x, y, board[x][y])
+
+
+def drawstatus(score, level):
+   scoresurf = basicfont.render('score: %s' % score, True, textcolor)
+   scorerect = scoresurf.get_rect()
+   scorerect.topleft = (windowwidth - 150, 20)
+   displaysurf.blit(scoresurf, scorerect)
+
+   levelsurf = basicfont.render('level: %s' % level, True, textcolor)
+   levelrect = levelsurf.get_rect()
+   levelrect.topleft = (windowwidth - 150, 50)
+   displaysurf.blit(levelsurf, levelrect)
+
+
+def drawpiece(piece, pixelx=None, pixely=None):
+   shapetodraw = shapes[piece['shape']][piece['rotation']]
+   if pixelx == None and pixely == None:
+       pixelx, pixely = converttopixelcoords(piece['x'], piece['y'])
+
+   for x in range(templatewidth):
+       for y in range(templateheight):
+           if shapetodraw[y][x] != blank:
+               drawbox(None, None, piece['color'], pixelx + (x * boxsize), pixely + (y * boxsize))
+
+
+def drawnextpiece(piece):
+   nextsurf = basicfont.render('next:', True, textcolor)
+   nextrect = nextsurf.get_rect()
+   nextrect.topleft = (windowwidth - 120, 80)
+   displaysurf.blit(nextsurf, nextrect)
+   drawpiece(piece, pixelx=windowwidth-120, pixely=100)
+
+
+if __name__ == '__main__':
+   main()
+
+
