@@ -1,1 +1,1 @@
-# game_tetris
+＃just a simple game
