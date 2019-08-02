@@ -1,1 +1,1 @@
-＃just a simple game
+＃just a simple python game with pycharm
